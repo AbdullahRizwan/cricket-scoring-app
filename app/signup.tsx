@@ -1,12 +1,14 @@
 import { useRouter } from 'expo-router'
 import { useEffect, useState } from 'react'
-import { ActivityIndicator, Alert, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { Alert, View } from 'react-native'
+import { ActivityIndicator, Button, Card, Text, TextInput, useTheme } from 'react-native-paper'
 import { supabase } from '../lib/supabase'
 import { useSupabaseSession } from '../lib/useSupabaseSession'
 
 export default function SignupScreen() {
   const { session, loading } = useSupabaseSession()
   const router = useRouter()
+  const theme = useTheme()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -32,51 +34,60 @@ export default function SignupScreen() {
 
   if (loading) {
     return (
-      <View className="flex-1 justify-center items-center bg-gray-50">
-        <ActivityIndicator size="large" color="#16A34A" />
+      <View style={{ flex: 1, backgroundColor: theme.colors.background, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator animating={true} size="large" color={theme.colors.primary} />
       </View>
     )
   }
 
   return (
-    <View className="flex-1 bg-gray-50 justify-center items-center px-6">
-      <View className="w-full bg-white p-6 rounded-2xl shadow-lg">
-        <Text className="text-3xl font-extrabold text-gray-800 mb-6 text-center">Create Account 🏏</Text>
-
-        <TextInput
-          placeholder="Email"
-          placeholderTextColor="#999"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          className="border border-gray-300 rounded-xl px-4 py-3 mb-4 text-gray-800"
-        />
-
-        <TextInput
-          placeholder="Password"
-          placeholderTextColor="#999"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          className="border border-gray-300 rounded-xl px-4 py-3 mb-6 text-gray-800"
-        />
-
-        <TouchableOpacity
-          onPress={handleSignup}
-          disabled={authLoading}
-          className={`py-3 rounded-xl ${authLoading ? 'bg-green-400' : 'bg-green-600'}`}
-        >
-          <Text className="text-center text-white text-lg font-semibold">
-            {authLoading ? 'Signing up...' : 'Sign Up'}
+    <View style={{ flex: 1, backgroundColor: theme.colors.background, justifyContent: 'center', padding: 20 }}>
+      <Card style={{ maxWidth: 400, alignSelf: 'center', width: '100%' }}>
+        <Card.Content style={{ padding: 24 }}>
+          <Text variant="headlineLarge" style={{ textAlign: 'center', marginBottom: 32, color: theme.colors.primary }}>
+            Create Account 🏏
           </Text>
-        </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => router.push('/login')} className="mt-5">
-          <Text className="text-center text-blue-600 font-medium">
-            Already have an account? <Text className="font-semibold underline">Login</Text>
-          </Text>
-        </TouchableOpacity>
-      </View>
+          <TextInput
+            label="Email"
+            mode="outlined"
+            placeholder="Enter your email"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+            style={{ marginBottom: 16 }}
+          />
+
+          <TextInput
+            label="Password"
+            mode="outlined"
+            placeholder="Create a password"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            style={{ marginBottom: 24 }}
+          />
+
+          <Button
+            mode="contained"
+            onPress={handleSignup}
+            disabled={authLoading}
+            loading={authLoading}
+            style={{ marginBottom: 16 }}
+          >
+            {authLoading ? 'Creating Account...' : 'Sign Up'}
+          </Button>
+
+          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              Already have an account?{' '}
+            </Text>
+            <Button mode="text" onPress={() => router.push('/login')} compact>
+              Login
+            </Button>
+          </View>
+        </Card.Content>
+      </Card>
     </View>
   )
 }
