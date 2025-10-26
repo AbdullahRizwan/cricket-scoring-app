@@ -1,7 +1,7 @@
 import { router } from 'expo-router'
 import { useEffect, useState } from 'react'
 import { View } from 'react-native'
-import { Button, IconButton, Text, useTheme } from 'react-native-paper'
+import { Button, Card, IconButton, Text, useTheme } from 'react-native-paper'
 import { supabase } from '../../lib/supabase'
 
 export default function HomeScreen() {
@@ -55,17 +55,20 @@ export default function HomeScreen() {
             Create a New Match
           </Button>
           
-          <Button
-            mode="outlined"
-            icon="play"
-            onPress={() => {
-              // TODO: Navigate to continue previous match screen
-              console.log('Continue previous match pressed')
-            }}
-            contentStyle={{ paddingVertical: 8 }}
-          >
-            Continue a Previous Match
-          </Button>
+          {/* Continue Previous Match Button */}
+          <Card style={{ marginBottom: 16 }}>
+            <Card.Content style={{ padding: 20 }}>
+              <Button
+                mode="outlined"
+                icon="play-circle"
+                style={{ height: 50 }}
+                labelStyle={{ fontSize: 16 }}
+                onPress={() => router.push('/continue-match')}
+              >
+                Continue a Previous Match
+              </Button>
+            </Card.Content>
+          </Card>
         </View>
       </View>
     </View>

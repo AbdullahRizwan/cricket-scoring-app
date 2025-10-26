@@ -1,15 +1,16 @@
 import DateTimePicker from '@react-native-community/datetimepicker'
 import { router } from 'expo-router'
 import { useState } from 'react'
-import { ScrollView, View } from 'react-native'
+import { Alert, ScrollView, View } from 'react-native'
 import {
-    Button,
-    Card,
-    IconButton,
-    Text,
-    TextInput,
-    useTheme
+  Button,
+  Card,
+  IconButton,
+  Text,
+  TextInput,
+  useTheme
 } from 'react-native-paper'
+import { CreateMatchData, MatchService } from '../lib/matchService'
 
 interface Player {
   id: string
@@ -26,6 +27,7 @@ export default function CreateNewMatchScreen() {
   const [teamBPlayerCount, setTeamBPlayerCount] = useState('11')
   const [teamAPlayers, setTeamAPlayers] = useState<Player[]>([])
   const [teamBPlayers, setTeamBPlayers] = useState<Player[]>([])
+  const [isCreating, setIsCreating] = useState(false)
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false)
@@ -85,22 +87,44 @@ export default function CreateNewMatchScreen() {
     }
   }
 
-  const handleCreateMatch = () => {
-    // TODO: Save match data to database
-    const matchData = {
-      date: matchDate,
-      teamA: {
-        name: teamAName,
-        players: teamAPlayers
-      },
-      teamB: {
-        name: teamBName,
-        players: teamBPlayers
-      }
+  const handleCreateMatch = async () => {
+    if (!teamAName.trim() || !teamBName.trim()) {
+      Alert.alert('Validation Error', 'Please enter team names')
+      return
     }
-    console.log('Creating match with data:', matchData)
-    // Navigate back or to match screen
-    router.back()
+
+    if (teamAPlayers.length === 0 || teamBPlayers.length === 0) {
+      Alert.alert('Validation Error', 'Each team must have at least one player')
+      return
+    }
+
+    setIsCreating(true)
+
+    try {
+      const matchData: CreateMatchData = {
+        match_date: matchDate,
+        team_a_name: teamAName,
+        team_b_name: teamBName,
+        team_a_players: teamAPlayers.map(player => ({ name: player.name })),
+        team_b_players: teamBPlayers.map(player => ({ name: player.name })),
+      }
+
+      console.log('🏏 Creating match with MatchService...')
+      const result = await MatchService.createMatch(matchData)
+      console.log('📊 MatchService result:', result)
+
+      if (result.success && result.match) {
+        console.log('✅ Match created successfully, redirecting to setup:', result.match.id)
+        router.replace(`/match-setup?matchId=${result.match.id}`)
+      } else {
+        Alert.alert('Error', result.error || 'Failed to create match')
+      }
+    } catch (error) {
+      console.error('❌ Error creating match:', error)
+      Alert.alert('Error', 'An unexpected error occurred: ' + error)
+    } finally {
+      setIsCreating(false)
+    }
   }
 
   return (
@@ -244,6 +268,7 @@ export default function CreateNewMatchScreen() {
             mode="outlined"
             onPress={() => router.back()}
             style={{ flex: 1 }}
+            disabled={isCreating}
           >
             Cancel
           </Button>
@@ -251,8 +276,10 @@ export default function CreateNewMatchScreen() {
             mode="contained"
             onPress={handleCreateMatch}
             style={{ flex: 1 }}
+            loading={isCreating}
+            disabled={isCreating}
           >
-            Create Match
+            {isCreating ? 'Creating...' : 'Create Match'}
           </Button>
         </View>
 

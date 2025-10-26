@@ -7,7 +7,8 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
-  anchor: '(tabs)/home',
+  // Remove hardcoded anchor to let index.tsx handle routing
+  initialRouteName: 'index',
 };
 
 export default function RootLayout() {
@@ -20,7 +21,16 @@ export default function RootLayout() {
     <PaperProvider theme={paperTheme}>
       <ThemeProvider value={navigationTheme}>
         <Stack>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="signup" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="create-match" options={{ headerShown: false }} />
+          <Stack.Screen name="continue-match" options={{ headerShown: false }} />
+          <Stack.Screen name="match-setup" options={{ headerShown: false }} />
+          <Stack.Screen name="match-scoring" options={{ headerShown: false }} />
+          <Stack.Screen name="simple-scoring" options={{ headerShown: false }} />
+          <Stack.Screen name="test-scoring" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar style="auto" />

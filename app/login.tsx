@@ -17,7 +17,7 @@ export default function LoginScreen() {
     const checkSession = async () => {
       const { data, error } = await supabase.auth.getSession();
       if (error) console.error(error);
-      if (data?.session) router.replace('/'); // redirect to home if logged in
+      if (data?.session) router.replace('/(tabs)/home'); // redirect to home if logged in
       else setLoading(false);
     };
     checkSession();
@@ -33,7 +33,7 @@ export default function LoginScreen() {
     setSubmitting(false);
 
     if (error) Alert.alert('Login failed', error.message);
-    else router.replace('/');
+    else router.replace('/(tabs)/home');
   };
 
   const goToSignup = () => router.push('/signup');

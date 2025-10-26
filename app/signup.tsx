@@ -15,7 +15,7 @@ export default function SignupScreen() {
   const [authLoading, setAuthLoading] = useState(false)
 
   useEffect(() => {
-    if (!loading && session) router.replace('/(tabs)')
+    if (!loading && session) router.replace('/(tabs)/home')
   }, [loading, session])
 
   const handleSignup = async () => {
