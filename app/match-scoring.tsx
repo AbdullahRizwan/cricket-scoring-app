@@ -2,15 +2,15 @@ import { router, useLocalSearchParams } from 'expo-router'
 import { useEffect, useState } from 'react'
 import { Alert, ScrollView, View } from 'react-native'
 import {
-    Button,
-    Card,
-    Chip,
-    Dialog,
-    Divider,
-    IconButton,
-    Portal,
-    Text,
-    useTheme
+  Button,
+  Card,
+  Chip,
+  Dialog,
+  Divider,
+  IconButton,
+  Portal,
+  Text,
+  useTheme
 } from 'react-native-paper'
 import { Match, Player } from '../lib/database.types'
 import { MatchService } from '../lib/matchService'
@@ -35,12 +35,14 @@ interface TeamScore {
 
 export default function MatchScoringScreen() {
   const theme = useTheme()
-  const { matchId, striker: initialStriker, nonStriker: initialNonStriker, bowler: initialBowler, battingTeam } = useLocalSearchParams<{
+  const { matchId, striker: initialStriker, nonStriker: initialNonStriker, bowler: initialBowler, battingTeam, innings: currentInnings, firstInningsScore } = useLocalSearchParams<{
     matchId: string
     striker: string
     nonStriker?: string
     bowler: string
     battingTeam: 'A' | 'B'
+    innings?: string
+    firstInningsScore?: string
   }>()
   
   const [match, setMatch] = useState<Match | null>(null)
@@ -51,7 +53,7 @@ export default function MatchScoringScreen() {
   // Match state
   const [currentBattingTeam, setCurrentBattingTeam] = useState<'A' | 'B'>(battingTeam || 'A')
   const [currentBowlingTeam, setCurrentBowlingTeam] = useState<'A' | 'B'>(battingTeam === 'A' ? 'B' : 'A')
-  const [inning, setInning] = useState<1 | 2>(1)
+  const [inning, setInning] = useState<1 | 2>(currentInnings === '2' ? 2 : 1)
   
   // Current players
   const [striker, setStriker] = useState<Player | null>(null)
@@ -211,67 +213,80 @@ export default function MatchScoringScreen() {
 
     // Handle wicket
     if (isWicket) {
-      // Add the striker to out players list first
-      if (striker) {
-        setOutPlayers(prev => new Set([...prev, striker.id]))
-      }
-
-      // Check if team is all out (auto-end innings)
-      const currentBattingPlayers = currentBattingTeam === 'A' ? teamAPlayers : teamBPlayers
-      const totalPlayers = currentBattingPlayers.length
+      console.log('🏏 WICKET OCCURRED!')
       
-      // Calculate how many players are still available to bat
-      // This includes the current non-striker (if any) but excludes the striker who just got out
-      const newOutPlayers = new Set([...outPlayers, striker.id])
-      const availablePlayers = getCurrentBattingPlayers().filter(player => 
-        player.id !== striker?.id && 
-        !newOutPlayers.has(player.id)
-      )
-      
-      console.log('Wicket occurred. Available players:', availablePlayers.length, 'newWickets:', newWickets, 'totalPlayers:', totalPlayers)
+      // First, update out players list to include the striker who just got out
+      const strikerOutId = striker.id
+      setOutPlayers(prev => {
+        const newOutSet = new Set([...prev, strikerOutId])
+        console.log('Updated out players:', Array.from(newOutSet))
+        return newOutSet
+      })
 
-      // Check if innings should end
-      if (newWickets >= totalPlayers || availablePlayers.length === 0) {
-        // Team is all out - auto end innings
-        Alert.alert(
-          'All Out!',
-          `${currentBattingTeam === 'A' ? match?.team_a_name : match?.team_b_name} is all out! (${newWickets}/${totalPlayers})`,
-          [
-            {
-              text: 'Continue',
-              onPress: () => {
-                endInnings()
-              }
-            }
-          ]
-        )
-      } else if (availablePlayers.length === 1 && availablePlayers[0].id === nonStriker?.id) {
-        // Only non-striker left - they become the last man
-        setStriker(nonStriker)
-        setNonStriker(null)
+      // Get all batting team players
+      const allBattingPlayers = getCurrentBattingPlayers()
+      console.log('All batting players:', allBattingPlayers.map(p => `${p.name} (${p.id})`))
+      
+      // Calculate who's still available (excluding the striker who just got out)
+      const currentOutPlayers = new Set([...outPlayers, strikerOutId])
+      const availablePlayers = allBattingPlayers.filter(p => !currentOutPlayers.has(p.id))
+      
+      console.log('Out players after wicket:', Array.from(currentOutPlayers))
+      console.log('Available players after wicket:', availablePlayers.map(p => `${p.name} (${p.id})`))
+      console.log('Available count:', availablePlayers.length)
+      console.log('Total players:', allBattingPlayers.length)
+      console.log('Wickets fallen:', newWickets)
+
+      // Cricket rule: You need at least 2 players to continue batting
+      // If only 1 or 0 players are available, innings ends
+      if (availablePlayers.length <= 1) {
+        console.log('🚨 INNINGS ENDING - Not enough players to continue')
+        console.log('Available players count:', availablePlayers.length)
+        console.log('Available players:', availablePlayers.map(p => p.name))
         
-        Alert.alert(
-          'Last Man Batting',
-          `${nonStriker?.name} is now the last batsman remaining.`,
-          [{ text: 'Continue' }]
-        )
-      } else if (availablePlayers.filter(p => p.id !== nonStriker?.id).length > 0) {
-        // There are players available for selection (excluding current non-striker)
-        showBatsmanSelection()
+        // Check if it's truly the end or if we have a last man scenario
+        if (availablePlayers.length === 1 && nonStriker && !currentOutPlayers.has(nonStriker.id)) {
+          // We have one available player AND a non-striker who's not out
+          // This means we can continue with last man batting
+          const lastPlayer = availablePlayers[0]
+          console.log('🏏 Last man scenario - continuing with:', lastPlayer.name, 'and', nonStriker.name)
+          
+          // Set the available player as striker and keep non-striker
+          setStriker(lastPlayer)
+          // Non-striker stays as is
+          
+          Alert.alert(
+            'Last Man Batting',
+            `${lastPlayer.name} and ${nonStriker.name} are the last pair remaining.`,
+            [{ text: 'Continue' }]
+          )
+        } else if (availablePlayers.length === 1 && availablePlayers[0].id === nonStriker?.id) {
+          // Only the non-striker is available - they become last man
+          console.log('🏏 Non-striker becomes last man')
+          setStriker(nonStriker)
+          setNonStriker(null)
+          
+          Alert.alert(
+            'Last Man Batting',
+            `${nonStriker?.name} is now the last batsman remaining.`,
+            [{ text: 'Continue' }]
+          )
+        } else {
+          // Truly no players left or can't continue - end innings
+          console.log('🚨 ENDING INNINGS - No viable players left')
+          setTimeout(() => {
+            Alert.alert(
+              'All Out!',
+              `${currentBattingTeam === 'A' ? match?.team_a_name : match?.team_b_name} is all out! (${newWickets}/${allBattingPlayers.length - 1})\n\n${inning === 1 ? 'Starting second innings...' : 'Match completed!'}`,
+              [{ text: 'OK' }]
+            )
+            endInnings()
+          }, 500)
+        }
       } else {
-        // This shouldn't happen but just in case
-        Alert.alert(
-          'All Out!',
-          `${currentBattingTeam === 'A' ? match?.team_a_name : match?.team_b_name} is all out!`,
-          [
-            {
-              text: 'Continue',
-              onPress: () => {
-                endInnings()
-              }
-            }
-          ]
-        )
+        // Multiple players available - show selection dialog
+        console.log('🏏 Multiple players available - showing selection')
+        showBatsmanSelection()
       }
     }
   }
@@ -343,21 +358,32 @@ export default function MatchScoringScreen() {
   }
 
   const endInnings = () => {
+    setEndInningsDialog(false)
+    
     if (inning === 1) {
-      // Start second innings
-      setInning(2)
-      setCurrentBattingTeam(currentBattingTeam === 'A' ? 'B' : 'A')
-      setCurrentBowlingTeam(currentBowlingTeam === 'A' ? 'B' : 'A')
-      setCurrentOver(1)
-      setCurrentBall(1)
-      setBallHistory([])
-      setStriker(null)
-      setNonStriker(null)
-      setBowler(null)
-      setOutPlayers(new Set()) // Reset out players for new innings
-      setEndInningsDialog(false)
-      
-      Alert.alert('Innings Complete', 'Starting second innings. Please select players for the second innings.')
+      // Show innings complete dialog first
+      Alert.alert(
+        'First Innings Complete!',
+        `${currentBattingTeam === 'A' ? match?.team_a_name : match?.team_b_name} scored ${getCurrentBattingScore().runs}/${getCurrentBattingScore().wickets}\n\nNow it's ${currentBattingTeam === 'A' ? match?.team_b_name : match?.team_a_name}'s turn to bat.`,
+        [
+          {
+            text: 'Select Players for 2nd Innings',
+            onPress: () => {
+              // Navigate to match setup for second innings player selection
+              router.push({
+                pathname: '/match-setup',
+                params: {
+                  matchId: matchId!,
+                  battingTeam: currentBattingTeam === 'A' ? 'B' : 'A',
+                  innings: '2',
+                  // Pass first innings score for context
+                  firstInningsScore: `${getCurrentBattingScore().runs}/${getCurrentBattingScore().wickets}`
+                }
+              })
+            }
+          }
+        ]
+      )
     } else {
       // Match complete
       completeMatch()
@@ -419,6 +445,20 @@ export default function MatchScoringScreen() {
             </Text>
           </View>
         </View>
+
+        {/* First Innings Score Display (for second innings) */}
+        {inning === 2 && firstInningsScore && (
+          <Card style={{ marginBottom: 16, backgroundColor: theme.colors.secondaryContainer }}>
+            <Card.Content>
+              <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, textAlign: 'center' }}>
+                First Innings: {firstInningsScore}
+              </Text>
+              <Text variant="bodyMedium" style={{ color: theme.colors.onSecondaryContainer, textAlign: 'center', marginTop: 4 }}>
+                Target to win: {parseInt(firstInningsScore.split('/')[0]) + 1} runs
+              </Text>
+            </Card.Content>
+          </Card>
+        )}
 
         {/* Current Score */}
         <Card style={{ marginBottom: 16 }}>

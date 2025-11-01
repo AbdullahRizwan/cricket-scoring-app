@@ -16,7 +16,12 @@ import { MatchService } from '../lib/matchService'
 
 export default function MatchSetupScreen() {
   const theme = useTheme()
-  const { matchId } = useLocalSearchParams<{ matchId: string }>()
+  const { matchId, battingTeam: secondInningsBattingTeam, innings, firstInningsScore } = useLocalSearchParams<{ 
+    matchId: string
+    battingTeam?: string
+    innings?: string
+    firstInningsScore?: string
+  }>()
   
   const [match, setMatch] = useState<Match | null>(null)
   const [teamAPlayers, setTeamAPlayers] = useState<Player[]>([])
@@ -47,9 +52,16 @@ export default function MatchSetupScreen() {
         setTeamAPlayers(result.teamAPlayers || [])
         setTeamBPlayers(result.teamBPlayers || [])
         
-        // Set default batting/bowling teams
-        setBattingTeam('A')
-        setBowlingTeam('B')
+        // Set batting/bowling teams based on innings
+        if (secondInningsBattingTeam) {
+          // Second innings - set teams from parameters
+          setBattingTeam(secondInningsBattingTeam as 'A' | 'B')
+          setBowlingTeam(secondInningsBattingTeam === 'A' ? 'B' : 'A')
+        } else {
+          // First innings - set default
+          setBattingTeam('A')
+          setBowlingTeam('B')
+        }
       } else {
         Alert.alert('Error', result.error || 'Failed to load match details')
         router.back()
@@ -103,9 +115,11 @@ export default function MatchSetupScreen() {
       console.log('Non-Striker:', nonStriker?.id, nonStriker?.name)
       console.log('Bowler:', bowler?.id, bowler?.name)
       console.log('Batting Team:', battingTeam)
+      console.log('Innings:', innings || '1')
       
-      // Navigate to full match scoring screen
-      const url = `/match-scoring?matchId=${matchId}&striker=${striker!.id}&bowler=${bowler!.id}&battingTeam=${battingTeam}${nonStriker ? `&nonStriker=${nonStriker.id}` : ''}`
+      // Navigate to full match scoring screen with innings info
+      const currentInnings = innings || '1'
+      const url = `/match-scoring?matchId=${matchId}&striker=${striker!.id}&bowler=${bowler!.id}&battingTeam=${battingTeam}&innings=${currentInnings}${nonStriker ? `&nonStriker=${nonStriker.id}` : ''}${firstInningsScore ? `&firstInningsScore=${firstInningsScore}` : ''}`
       console.log('🔗 Navigating to full scoring screen:', url)
       router.push(url as any)
     }
@@ -158,35 +172,54 @@ export default function MatchSetupScreen() {
               {match.team_a_name} vs {match.team_b_name}
             </Text>
             <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-              Match Setup - Select Players
+              {innings === '2' ? '2nd Innings - Select Players' : 'Match Setup - Select Players'}
             </Text>
           </View>
         </View>
 
+        {/* Second Innings Info */}
+        {innings === '2' && firstInningsScore && (
+          <Card style={{ marginBottom: 16, backgroundColor: theme.colors.secondaryContainer }}>
+            <Card.Content>
+              <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, marginBottom: 8 }}>
+                First Innings Complete! 🏏
+              </Text>
+              <Text variant="bodyLarge" style={{ color: theme.colors.onSecondaryContainer }}>
+                First Innings Score: {firstInningsScore}
+              </Text>
+              <Text variant="bodyMedium" style={{ color: theme.colors.onSecondaryContainer, marginTop: 4 }}>
+                {secondInningsBattingTeam === 'A' ? match.team_a_name : match.team_b_name} to bat now
+              </Text>
+            </Card.Content>
+          </Card>
+        )}
+
         {/* Batting Team Selection */}
-        <Card style={{ marginBottom: 16 }}>
-          <Card.Content>
-            <Text variant="titleMedium" style={{ marginBottom: 12, color: theme.colors.onSurface }}>
-              Who Will Bat First?
-            </Text>
-            <SegmentedButtons
-              value={battingTeam}
-              onValueChange={handleTeamSelection}
-              buttons={[
-                {
-                  value: 'A',
-                  label: match.team_a_name,
-                  icon: battingTeam === 'A' ? 'cricket' : undefined
-                },
-                {
-                  value: 'B',
-                  label: match.team_b_name,
-                  icon: battingTeam === 'B' ? 'cricket' : undefined
-                }
-              ]}
-            />
-          </Card.Content>
-        </Card>
+        {innings !== '2' && (
+          <Card style={{ marginBottom: 16 }}>
+            <Card.Content>
+              <Text variant="titleMedium" style={{ marginBottom: 12, color: theme.colors.onSurface }}>
+                Who Will Bat First?
+              </Text>
+              <SegmentedButtons
+                value={battingTeam}
+                onValueChange={handleTeamSelection}
+                buttons={[
+                  {
+                    value: 'A',
+                    label: match.team_a_name,
+                    icon: battingTeam === 'A' ? 'cricket' : undefined
+                  },
+                  {
+                    value: 'B',
+                    label: match.team_b_name,
+                    icon: battingTeam === 'B' ? 'cricket' : undefined
+                  }
+                ]}
+              />
+            </Card.Content>
+          </Card>
+        )}
 
         {/* Batsman Selection */}
         <Card style={{ marginBottom: 16 }}>
@@ -305,7 +338,10 @@ export default function MatchSetupScreen() {
             opacity: canStartMatch() ? 1 : 0.6
           }}
         >
-          {canStartMatch() ? 'Setup Complete - Begin Match' : 'Select Striker and Bowler to Continue'}
+          {canStartMatch() ? 
+            (innings === '2' ? 'Setup Complete - Begin 2nd Innings' : 'Setup Complete - Begin Match') : 
+            'Select Striker and Bowler to Continue'
+          }
         </Button>
 
       </View>
