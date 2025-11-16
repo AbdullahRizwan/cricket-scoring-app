@@ -34,6 +34,25 @@ interface TeamScore {
 }
 
 export default function MatchScoringScreen() {
+  // Show winner popup if target achieved
+  const completeMatchWithWinner = async (winnerName: string) => {
+    try {
+      await MatchService.updateMatchStatus(matchId!, false, 'completed')
+      Alert.alert(
+        'Match Complete!',
+        `${winnerName} has won the match!\n\nFinal Score:\n${match?.team_a_name}: ${teamAScore.runs}/${teamAScore.wickets}\n${match?.team_b_name}: ${teamBScore.runs}/${teamBScore.wickets}`,
+        [
+          {
+            text: 'Back to Home',
+            onPress: () => router.replace('/(tabs)/home')
+          }
+        ]
+      )
+    } catch (error) {
+      console.error('Error completing match:', error)
+      Alert.alert('Error', 'Failed to complete match')
+    }
+  }
   const theme = useTheme()
   const { matchId, striker: initialStriker, nonStriker: initialNonStriker, bowler: initialBowler, battingTeam, innings: currentInnings, firstInningsScore } = useLocalSearchParams<{
     matchId: string
@@ -79,6 +98,7 @@ export default function MatchScoringScreen() {
   const [bowlerSelectDialog, setBowlerSelectDialog] = useState(false)
   const [endInningsDialog, setEndInningsDialog] = useState(false)
   const [batsmanSelectDialog, setBatsmanSelectDialog] = useState(false)
+  const [noBallDialog, setNoBallDialog] = useState(false)
 
   useEffect(() => {
     if (matchId) {
@@ -164,6 +184,7 @@ export default function MatchScoringScreen() {
     // Update ball history
     setBallHistory(prev => [...prev, newBall])
 
+
     // Update team score
     const currentScore = getCurrentBattingScore()
     let newRuns = currentScore.runs + runs
@@ -193,6 +214,17 @@ export default function MatchScoringScreen() {
       balls: newBalls
     })
 
+    // Check for target achieved in second innings
+    if (inning === 2 && firstInningsScore) {
+      const target = parseInt(firstInningsScore.split('/')[0]) + 1
+      if (newRuns >= target) {
+        // End match and show winner popup
+        const winner = currentBattingTeam === 'A' ? match?.team_a_name : match?.team_b_name
+        completeMatchWithWinner(winner || (currentBattingTeam === 'A' ? 'Team A' : 'Team B'))
+        return
+      }
+    }
+
     // Update player stats
     if (striker) {
       setPlayerStats(prev => ({
@@ -204,8 +236,8 @@ export default function MatchScoringScreen() {
       }))
     }
 
-    // Switch strike on odd runs (for normal balls)
-    if (runs % 2 === 1 && extras === 'none' && !isWicket && nonStriker) {
+    // Switch strike on odd runs (for normal balls) - only if both batsmen are present
+    if (runs % 2 === 1 && extras === 'none' && !isWicket && nonStriker && striker) {
       const temp = striker
       setStriker(nonStriker)
       setNonStriker(temp)
@@ -213,56 +245,33 @@ export default function MatchScoringScreen() {
 
     // Handle wicket
     if (isWicket) {
-      console.log('🏏 WICKET OCCURRED!')
-      
-      // First, update out players list to include the striker who just got out
-      const strikerOutId = striker.id
-      setOutPlayers(prev => {
-        const newOutSet = new Set([...prev, strikerOutId])
-        console.log('Updated out players:', Array.from(newOutSet))
-        return newOutSet
-      })
+      // Add the striker to out players list first
+      if (striker) {
+        setOutPlayers(prev => new Set([...prev, striker.id]))
+      }
 
-      // Get all batting team players
-      const allBattingPlayers = getCurrentBattingPlayers()
-      console.log('All batting players:', allBattingPlayers.map(p => `${p.name} (${p.id})`))
+      // Check if team is all out (auto-end innings)
+      const currentBattingPlayers = currentBattingTeam === 'A' ? teamAPlayers : teamBPlayers
+      const totalPlayers = currentBattingPlayers.length
       
-      // Calculate who's still available (excluding the striker who just got out)
-      const currentOutPlayers = new Set([...outPlayers, strikerOutId])
-      const availablePlayers = allBattingPlayers.filter(p => !currentOutPlayers.has(p.id))
+      // Calculate how many players are still available to bat (excluding the striker who just got out)
+      const newOutPlayers = new Set([...outPlayers, striker.id])
+      const availablePlayers = getCurrentBattingPlayers().filter(player => 
+        !newOutPlayers.has(player.id)
+      )
       
-      console.log('Out players after wicket:', Array.from(currentOutPlayers))
-      console.log('Available players after wicket:', availablePlayers.map(p => `${p.name} (${p.id})`))
-      console.log('Available count:', availablePlayers.length)
-      console.log('Total players:', allBattingPlayers.length)
-      console.log('Wickets fallen:', newWickets)
+      console.log('🏏 WICKET DEBUG:')
+      console.log('- Striker out:', striker?.name, striker?.id)
+      console.log('- Non-striker:', nonStriker?.name, nonStriker?.id)
+      console.log('- Available players after wicket:', availablePlayers.map(p => p.name))
+      console.log('- Available count:', availablePlayers.length)
+      console.log('- New wickets:', newWickets, 'Total players:', totalPlayers)
 
-      // Cricket rule: You need at least 2 players to continue batting
-      // If only 1 or 0 players are available, innings ends
+      // Check if innings should end (when only 1 or 0 players remain)
       if (availablePlayers.length <= 1) {
-        console.log('🚨 INNINGS ENDING - Not enough players to continue')
-        console.log('Available players count:', availablePlayers.length)
-        console.log('Available players:', availablePlayers.map(p => p.name))
-        
-        // Check if it's truly the end or if we have a last man scenario
-        if (availablePlayers.length === 1 && nonStriker && !currentOutPlayers.has(nonStriker.id)) {
-          // We have one available player AND a non-striker who's not out
-          // This means we can continue with last man batting
-          const lastPlayer = availablePlayers[0]
-          console.log('🏏 Last man scenario - continuing with:', lastPlayer.name, 'and', nonStriker.name)
-          
-          // Set the available player as striker and keep non-striker
-          setStriker(lastPlayer)
-          // Non-striker stays as is
-          
-          Alert.alert(
-            'Last Man Batting',
-            `${lastPlayer.name} and ${nonStriker.name} are the last pair remaining.`,
-            [{ text: 'Continue' }]
-          )
-        } else if (availablePlayers.length === 1 && availablePlayers[0].id === nonStriker?.id) {
-          // Only the non-striker is available - they become last man
-          console.log('🏏 Non-striker becomes last man')
+        // If exactly 1 player left and it's the current non-striker, they continue as last man
+        if (availablePlayers.length === 1 && availablePlayers[0].id === nonStriker?.id) {
+          console.log('🏏 Setting non-striker as last man')
           setStriker(nonStriker)
           setNonStriker(null)
           
@@ -272,16 +281,16 @@ export default function MatchScoringScreen() {
             [{ text: 'Continue' }]
           )
         } else {
-          // Truly no players left or can't continue - end innings
-          console.log('🚨 ENDING INNINGS - No viable players left')
-          setTimeout(() => {
-            Alert.alert(
-              'All Out!',
-              `${currentBattingTeam === 'A' ? match?.team_a_name : match?.team_b_name} is all out! (${newWickets}/${allBattingPlayers.length - 1})\n\n${inning === 1 ? 'Starting second innings...' : 'Match completed!'}`,
-              [{ text: 'OK' }]
-            )
-            endInnings()
-          }, 500)
+          // No viable players left - end innings
+          console.log('🏏 No players left - ending innings')
+          Alert.alert(
+            'All Out!',
+            `${currentBattingTeam === 'A' ? match?.team_a_name : match?.team_b_name} is all out! (${newWickets}/${totalPlayers - 1})\n\n${inning === 1 ? 'Starting second innings...' : 'Match completed!'}`,
+            [{ 
+              text: 'OK',
+              onPress: () => endInnings()
+            }]
+          )
         }
       } else {
         // Multiple players available - show selection dialog
@@ -362,6 +371,7 @@ export default function MatchScoringScreen() {
     
     if (inning === 1) {
       // Show innings complete dialog first
+      console.log("debug: new ining player selection")
       Alert.alert(
         'First Innings Complete!',
         `${currentBattingTeam === 'A' ? match?.team_a_name : match?.team_b_name} scored ${getCurrentBattingScore().runs}/${getCurrentBattingScore().wickets}\n\nNow it's ${currentBattingTeam === 'A' ? match?.team_b_name : match?.team_a_name}'s turn to bat.`,
@@ -514,6 +524,8 @@ export default function MatchScoringScreen() {
                   onPress={() => recordBall(runs)}
                   style={{ minWidth: 60 }}
                   disabled={!striker || !bowler}
+                  buttonColor={runs === 4 || runs === 6 ? '#3f693fff' : undefined}
+                  textColor={runs === 4 || runs === 6 ? 'white' : undefined}
                 >
                   {runs}
                 </Button>
@@ -526,7 +538,7 @@ export default function MatchScoringScreen() {
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               <Button
                 mode="outlined"
-                onPress={() => recordBall(1, 'no-ball')}
+                onPress={() => setNoBallDialog(true)}
                 disabled={!striker || !bowler}
               >
                 No Ball
@@ -574,7 +586,7 @@ export default function MatchScoringScreen() {
 
       {/* Bowler Selection Dialog */}
       <Portal>
-        <Dialog visible={bowlerSelectDialog} onDismiss={() => setBowlerSelectDialog(false)}>
+        <Dialog visible={bowlerSelectDialog} onDismiss={() => setBowlerSelectDialog(false)} dismissable={false}>
           <Dialog.Title>Over Complete - Select Next Bowler</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodyMedium" style={{ marginBottom: 16 }}>
@@ -600,7 +612,7 @@ export default function MatchScoringScreen() {
 
       {/* End Innings Dialog */}
       <Portal>
-        <Dialog visible={endInningsDialog} onDismiss={() => setEndInningsDialog(false)}>
+        <Dialog visible={endInningsDialog} onDismiss={() => setEndInningsDialog(false)} dismissable={false}>
           <Dialog.Title>End Innings</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodyMedium">
@@ -621,7 +633,7 @@ export default function MatchScoringScreen() {
 
       {/* Batsman Selection Dialog */}
       <Portal>
-        <Dialog visible={batsmanSelectDialog} onDismiss={() => setBatsmanSelectDialog(false)}>
+        <Dialog visible={batsmanSelectDialog} onDismiss={() => setBatsmanSelectDialog(false)} dismissable={false}>
           <Dialog.Title>Wicket! Select Next Batsman</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodyMedium" style={{ marginBottom: 16 }}>
@@ -659,6 +671,37 @@ export default function MatchScoringScreen() {
               })()}
             </View>
           </Dialog.Content>
+        </Dialog>
+      </Portal>
+
+      {/* No Ball Dialog */}
+      <Portal>
+        <Dialog visible={noBallDialog} onDismiss={() => setNoBallDialog(false)} dismissable={false}>
+          <Dialog.Title>No Ball - Select Additional Runs</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium" style={{ marginBottom: 16 }}>
+              A no ball gives 1 extra run. Select additional runs scored by the batsman:
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {[0, 1, 2, 3, 4, 6].map(runs => (
+                <Button
+                  key={runs}
+                  mode="outlined"
+                  onPress={() => {
+                    // No ball gives 1 extra + any runs scored by batsman
+                    recordBall(1 + runs, 'no-ball')
+                    setNoBallDialog(false)
+                  }}
+                  style={{ minWidth: 60 }}
+                >
+                  {runs === 0 ? 'Just No Ball (1)' : `${runs} + No Ball (${1 + runs})`}
+                </Button>
+              ))}
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setNoBallDialog(false)}>Cancel</Button>
+          </Dialog.Actions>
         </Dialog>
       </Portal>
     </ScrollView>
