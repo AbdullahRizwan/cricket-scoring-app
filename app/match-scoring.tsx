@@ -14,6 +14,7 @@ import {
 } from 'react-native-paper'
 import { Match, Player } from '../lib/database.types'
 import { MatchService } from '../lib/matchService'
+import { getBattingStats, getBowlingStats, getTeamExtras } from './match-details-utils'
 
 interface Ball {
   id: string
@@ -34,25 +35,6 @@ interface TeamScore {
 }
 
 export default function MatchScoringScreen() {
-  // Show winner popup if target achieved
-  const completeMatchWithWinner = async (winnerName: string) => {
-    try {
-      await MatchService.updateMatchStatus(matchId!, false, 'completed')
-      Alert.alert(
-        'Match Complete!',
-        `${winnerName} has won the match!\n\nFinal Score:\n${match?.team_a_name}: ${teamAScore.runs}/${teamAScore.wickets}\n${match?.team_b_name}: ${teamBScore.runs}/${teamBScore.wickets}`,
-        [
-          {
-            text: 'Back to Home',
-            onPress: () => router.replace('/(tabs)/home')
-          }
-        ]
-      )
-    } catch (error) {
-      console.error('Error completing match:', error)
-      Alert.alert('Error', 'Failed to complete match')
-    }
-  }
   const theme = useTheme()
   const { matchId, striker: initialStriker, nonStriker: initialNonStriker, bowler: initialBowler, battingTeam, innings: currentInnings, firstInningsScore } = useLocalSearchParams<{
     matchId: string
@@ -147,6 +129,58 @@ export default function MatchScoringScreen() {
     }
   }
 
+  // Show winner popup if target achieved
+  const completeMatchWithWinner = async (winnerName: string) => {
+    try {
+      // Calculate stats
+      const allPlayers = [...teamAPlayers, ...teamBPlayers]
+      const teamA = allPlayers.filter(p => p.team === 'A')
+      const teamB = allPlayers.filter(p => p.team === 'B')
+      const battingStatsA = getBattingStats(teamA, ballHistory, 'A')
+      const battingStatsB = getBattingStats(teamB, ballHistory, 'B')
+      const bowlingStatsA = getBowlingStats(teamA, ballHistory, 'A')
+      const bowlingStatsB = getBowlingStats(teamB, ballHistory, 'B')
+      const extrasA = getTeamExtras(ballHistory, teamA)
+      const extrasB = getTeamExtras(ballHistory, teamB)
+
+      const stats = {
+        teamA: {
+          batting: battingStatsA,
+          bowling: bowlingStatsA,
+          extras: extrasA
+        },
+        teamB: {
+          batting: battingStatsB,
+          bowling: bowlingStatsB,
+          extras: extrasB
+        }
+      }
+
+      await MatchService.updateMatchStatus(matchId!, false, 'completed', { 
+        venue: JSON.stringify(stats),
+        team_a_score: teamAScore.runs,
+        team_a_wickets: teamAScore.wickets,
+        team_a_overs_played: teamAScore.overs,
+        team_b_score: teamBScore.runs,
+        team_b_wickets: teamBScore.wickets,
+        team_b_overs_played: teamBScore.overs
+      })
+      Alert.alert(
+        'Match Complete!',
+        `${winnerName} has won the match!\n\nFinal Score:\n${match?.team_a_name}: ${teamAScore.runs}/${teamAScore.wickets}\n${match?.team_b_name}: ${teamBScore.runs}/${teamBScore.wickets}`,
+        [
+          {
+            text: 'Back to Home',
+            onPress: () => router.replace('/(tabs)/home')
+          }
+        ]
+      )
+    } catch (error) {
+      console.error('Error completing match:', error)
+      Alert.alert('Error', 'Failed to complete match')
+    }
+  }
+
   const getCurrentBattingScore = () => {
     return currentBattingTeam === 'A' ? teamAScore : teamBScore
   }
@@ -167,7 +201,7 @@ export default function MatchScoringScreen() {
     return currentBowlingTeam === 'A' ? teamAPlayers : teamBPlayers
   }
 
-  const recordBall = (runs: number, extras: Ball['extras'] = 'none', isWicket: boolean = false) => {
+  const recordBall = async (runs: number, extras: Ball['extras'] = 'none', isWicket: boolean = false) => {
     if (!striker || !bowler) return
 
     const newBall: Ball = {
@@ -182,7 +216,15 @@ export default function MatchScoringScreen() {
     }
 
     // Update ball history
-    setBallHistory(prev => [...prev, newBall])
+    const newHistory = [...ballHistory, newBall];
+    setBallHistory(newHistory);
+
+    // Save to DB
+    try {
+      await MatchService.updateMatchStatus(matchId!, true, undefined, { venue: JSON.stringify({ type: 'ballHistory', data: newHistory }) });
+    } catch (error) {
+      console.error('Error saving ball to DB:', error);
+    }
 
 
     // Update team score

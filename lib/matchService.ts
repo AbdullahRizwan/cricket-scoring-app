@@ -219,9 +219,9 @@ export class MatchService {
   /**
    * Update match status (ongoing, completed, etc.)
    */
-  static async updateMatchStatus(matchId: string, ongoing: boolean, status?: 'upcoming' | 'live' | 'completed' | 'cancelled'): Promise<{ success: boolean; error?: string }> {
+  static async updateMatchStatus(matchId: string, ongoing: boolean, status?: 'upcoming' | 'live' | 'completed' | 'cancelled', additionalData?: Record<string, any>): Promise<{ success: boolean; error?: string }> {
     try {
-      const updateData: any = { ongoing }
+      const updateData: any = { ongoing, ...additionalData }
       if (status) {
         updateData.status = status
       }
